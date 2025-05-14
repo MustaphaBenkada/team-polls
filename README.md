@@ -66,7 +66,7 @@ The application will be available at:
 
 1. Install dependencies:
    ```bash
-   cd backend
+   cd team-polls
    npm install
    ```
 
