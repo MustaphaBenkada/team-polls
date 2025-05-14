@@ -162,7 +162,7 @@ The application will be available at:
 ### Running Tests
 ```bash
 # Backend tests
-cd backend
+cd team-polls
 npm test
 
 # Frontend tests
