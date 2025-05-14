@@ -1,19 +1,32 @@
 // @ts-nocheck
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import { z } from 'zod';
 import pool from '../db';
 import { CastVotePayload } from '../types/poll';
-import { authenticate } from '../middleware/authMiddleware'; // Assuming you'll create this
+import rateLimit from 'express-rate-limit';
+import { broadcastTally } from '../websocket';
 
 const router = express.Router();
 
-// F3: Cast Vote (requires authentication)
-router.post('/:id/vote', authenticate, async (
-  req: Request<{ id: string }, {}, CastVotePayload & { userId: string }>,
-  res: Response
-) => {
+// Create rate limiter instance
+const voteLimiter = rateLimit({
+  windowMs: 1000, // 1 second window
+  max: 5,
+  message: 'Too many votes cast from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (request) => request.ip || 'unknown'
+});
+
+// Cast Vote (authentication and rate limiting are handled in index.ts)
+router.post('/:id/vote', voteLimiter, async (req: Request<{ id: string }, {}, CastVotePayload>, res: Response) => {
   const { id } = req.params;
-  const { optionIndex, userId } = req.body;
+  const { optionIndex } = req.body;
+  const userId = req.userId;
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
 
   try {
     const pollResult = await pool.query('SELECT options, expires_at FROM polls WHERE id = $1', [id]);
@@ -45,7 +58,8 @@ router.post('/:id/vote', authenticate, async (
       [id, userId, optionIndex]
     );
 
-    // TODO: Broadcast live tally delta via WebSocket
+    // Broadcast updated tally via WebSocket
+    await broadcastTally(id);
 
     res.status(201).json({ message: 'Vote cast successfully' });
   } catch (error) {

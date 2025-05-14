@@ -1,33 +1,79 @@
 version: '3.8'
 services:
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://app:3000
+      - VITE_WS_URL=ws://app:3000
+    depends_on:
+      - app
+    networks:
+      - app-network
+
   app:
     build: .
     ports:
       - "3000:3000"
     environment:
+      DOCKER_ENVIRONMENT: 'true'
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-teampolls}
       REDIS_URL: redis://${REDIS_USER:-redis}:${REDIS_PASSWORD:-}@redis:6379/0
       JWT_SECRET: ${JWT_SECRET:-fallback-secret-for-dev}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-teampolls}
+      NODE_ENV: development
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
-      - .:/app # For development, mount code changes
-    command: sh -c "echo \"Forcing migrations with explicit input...\" && pg-migrate up -u 'postgresql://poll_admin:secure123@db:5432/teampolls_db' -d /app/migrations --verbose 2>&1 && echo \"Migrations finished.\" && npm start"
+      - .:/app
+    command: sh /app/init.sh
+    networks:
+      - app-network
 
   db:
     image: postgres:15-alpine
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-teampolls}
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   db_data:

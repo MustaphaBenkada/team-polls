@@ -1,14 +1,24 @@
 FROM node:20-alpine
 
+# Install postgresql-client for pg_isready command
+RUN apk add --no-cache postgresql-client
+
 WORKDIR /app
 
+# Copy package files first
 COPY package*.json ./
 RUN npm ci
 
-RUN npm install -g pg-migrate@2.0.1  # Explicitly install pg-migrate globally in the image
-
-COPY . .
-
+# Copy source code and build it
+COPY tsconfig.json ./
+COPY src/ ./src/
 RUN npx tsc
 
-CMD ["node", "dist/index.js"]
+# Copy migrations
+COPY migrations/ ./migrations/
+
+# Copy and set up init script
+COPY init.sh /init.sh
+RUN chmod +x /init.sh
+
+CMD ["/init.sh"]

@@ -62,4 +62,37 @@ router.get('/:id', async (
   }
 });
 
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const pollsResult = await pool.query(
+      'SELECT id, question, options, expires_at FROM polls ORDER BY created_at DESC'
+    );
+    
+    // Get vote counts for all polls
+    const votesResult = await pool.query(
+      'SELECT poll_id, option_index, COUNT(*) FROM votes GROUP BY poll_id, option_index'
+    );
+
+    const polls = pollsResult.rows.map(poll => {
+      const votes = poll.options.reduce((acc: Record<string, number>, _: string, index: number) => {
+        const voteCount = votesResult.rows.find(
+          row => row.poll_id === poll.id && row.option_index === index
+        );
+        acc[index] = parseInt(voteCount?.count || '0');
+        return acc;
+      }, {});
+
+      return {
+        ...poll,
+        votes
+      };
+    });
+
+    res.json(polls);
+  } catch (error) {
+    console.error('Error fetching polls:', error);
+    res.status(500).json({ error: 'Failed to fetch polls' });
+  }
+});
+
 export default router;

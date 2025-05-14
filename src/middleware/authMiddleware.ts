@@ -9,7 +9,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     const token = authHeader.split(' ')[1];
     try {
       const decoded = jwt.verify(token, jwtSecret) as { userId: string };
-      req.body.userId = decoded.userId; // Attach userId to the request body
+      req.userId = decoded.userId; // Attach userId to the request object
       next();
     } catch (error) {
       return res.status(401).json({ error: 'Invalid token' });
